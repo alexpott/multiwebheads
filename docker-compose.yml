@@ -1,0 +1,107 @@
+name: drupal-cluster
+
+networks:
+  frontend:
+  backend:
+  # Fixed subnet so web heads can reach the NFS server by a stable IP
+  nfs-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  nfs-export:   # Backing storage inside the NFS server container
+  mysql-data:
+
+services:
+
+  # ── NFS server ─────────────────────────────────────────────────────────────
+  nfs:
+    image: erichough/nfs-server:latest
+    networks:
+      nfs-net:
+        ipv4_address: 172.28.0.2
+    privileged: true
+    volumes:
+      - nfs-export:/exports/files
+    environment:
+      NFS_EXPORT_0: /exports/files *(rw,fsid=0,sync,no_subtree_check,no_root_squash)
+    healthcheck:
+      test: ["CMD-SHELL", "showmount -e localhost | grep -q /exports/files"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ── Web heads ──────────────────────────────────────────────────────────────
+  # YAML anchor — web2/3/4 inherit every key from web1
+  web1: &web
+    build: ./docker/web
+    networks:
+      - frontend
+      - backend
+      - nfs-net
+    volumes:
+      - .:/var/www/html
+      - ./docker/sites:/var/www/html/sites
+    environment:
+      NFS_SERVER: 172.28.0.2
+      NFS_EXPORT: /
+      MYSQL_HOST: db
+      MYSQL_DATABASE: drupal
+      MYSQL_USER: drupal
+      MYSQL_PASSWORD: drupal
+    cap_add:
+      - SYS_ADMIN
+    depends_on:
+      nfs:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web2:
+    <<: *web
+
+  web3:
+    <<: *web
+
+  web4:
+    <<: *web
+
+  # ── Load balancer ──────────────────────────────────────────────────────────
+  lb:
+    image: haproxy:3.0
+    networks:
+      - frontend
+    ports:
+      - "8081:80"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - web1
+      - web2
+      - web3
+      - web4
+    restart: unless-stopped
+
+  # ── Database ───────────────────────────────────────────────────────────────
+  db:
+    image: mysql:9.2
+    networks:
+      - backend
+    volumes:
+      - mysql-data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: drupal
+      MYSQL_USER: drupal
+      MYSQL_PASSWORD: drupal
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped

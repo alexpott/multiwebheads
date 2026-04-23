@@ -78,7 +78,7 @@ services:
     ports:
       - "8081:80"
     volumes:
-      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./docker/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
       - web1
       - web2

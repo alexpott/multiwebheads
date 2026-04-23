@@ -43,8 +43,11 @@ services:
       - backend
       - nfs-net
     volumes:
-      - .:/var/www/html
+      - ${HOST_DRUPAL_PATH}:/var/www/html
       - ./docker/sites:/var/www/html/sites
+      - ${HOST_DRUPAL_PATH}/sites/development.services.yml:/var/www/html/sites/development.services.yml
+      - ${HOST_DRUPAL_PATH}/sites/default/default.settings.php:/var/www/html/sites/default/default.settings.php
+      - ${HOST_DRUPAL_PATH}/sites/default/default.services.yml:/var/www/html/sites/default/default.services.yml
     environment:
       NFS_SERVER: 172.28.0.2
       NFS_EXPORT: /

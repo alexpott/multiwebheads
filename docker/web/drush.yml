@@ -1,0 +1,5 @@
+# Global options.
+command:
+  sql:
+    options:
+      extra: '--skip-ssl-verify-server-cert'
